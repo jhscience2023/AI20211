@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>달의 위상 변화, 내가 그린 게 맞을까?</title>
+<meta name="description" content="중학교 1학년 과학 달의 위상 변화 자기점검 시뮬레이션">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jua&family=Noto+Sans+KR:wght@400;700;800&display=swap">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+const v=n=>`var(--${n})`;
+tailwind.config={theme:{extend:{fontFamily:{sans:['"Noto Sans KR"','sans-serif'],display:['Jua','"Noto Sans KR"','sans-serif']},
+colors:Object.fromEntries(["background","foreground","card","primary","primary-foreground","secondary","secondary-foreground","muted","muted-foreground","accent","accent-foreground","border","space","sun","moon-lit","moon-dark","destructive","glove"].map(n=>[n,v(n)]))}}};
+</script>
+<style>
+:root {
+  --radius: 0.875rem;
+  --background: oklch(0.2 0.05 265);
+  --foreground: oklch(0.97 0.01 250);
+  --card: oklch(0.26 0.055 265);
+  --card-foreground: oklch(0.97 0.01 250);
+  --popover: oklch(0.26 0.055 265);
+  --popover-foreground: oklch(0.97 0.01 250);
+  --primary: oklch(0.84 0.16 80);
+  --primary-foreground: oklch(0.2 0.05 265);
+  --secondary: oklch(0.34 0.06 265);
+  --secondary-foreground: oklch(0.97 0.01 250);
+  --muted: oklch(0.3 0.05 265);
+  --muted-foreground: oklch(0.8 0.03 255);
+  --accent: oklch(0.72 0.17 55);
+  --accent-foreground: oklch(0.18 0.04 265);
+  --destructive: oklch(0.65 0.2 25);
+  --destructive-foreground: oklch(0.98 0 0);
+  --border: oklch(0.42 0.06 265);
+  --input: oklch(0.42 0.06 265);
+  --ring: oklch(0.84 0.16 80);
+  --space: oklch(0.15 0.045 268);
+  --sun: oklch(0.88 0.17 90);
+  --sun-deep: oklch(0.74 0.18 55);
+  --earth: oklch(0.58 0.15 245);
+  --land: oklch(0.65 0.16 145);
+  --moon-lit: oklch(0.92 0.01 90);
+  --moon-dark: oklch(0.3 0.01 260);
+  --glove: oklch(0.62 0.23 27);
+  --person-skin: oklch(0.82 0.07 60);
+  --person-hair: oklch(0.25 0.03 50);
+  --person-shirt: oklch(0.7 0.09 230);
+  --person-pants: oklch(0.35 0.05 260);
+}
+
+*{border-color:var(--border)} body{margin:0;background:var(--background);color:var(--foreground);font-family:"Noto Sans KR",sans-serif}
+</style><script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head><body><div id="root"></div>
+<script type="text/babel">
+const { useEffect, useRef, useState } = React;
+// angle: 지구 기준 수학 각도(0° = 태양 쪽 오른쪽, 반시계 증가) = 이각
+const POSITIONS = [
+  { label: "가", angle: 90, name: "상현달", day: "음력 7~8일경", desc: "오른쪽 절반이 밝게 보여요." },
+  { label: "나", angle: 135, name: "차오르는 볼록달", day: "음력 10~12일경", desc: "오른쪽이 더 많이 밝아져 볼록해요." },
+  { label: "다", angle: 180, name: "보름달", day: "음력 15일경", desc: "밝은 절반 전체가 지구를 향해요." },
+  { label: "라", angle: 225, name: "기우는 볼록달", day: "음력 18~20일경", desc: "오른쪽부터 어두워지고 왼쪽이 밝아요." },
+  { label: "마", angle: 270, name: "하현달", day: "음력 22~23일경", desc: "왼쪽 절반이 밝게 보여요." },
+  { label: "바", angle: 315, name: "그믐달", day: "음력 26~27일경", desc: "왼쪽에 가는 눈썹 모양만 밝아요." },
+  { label: "사", angle: 0, name: "삭", day: "음력 1일경", desc: "밝은 쪽이 태양을 향해 거의 보이지 않아요." },
+  { label: "아", angle: 45, name: "초승달", day: "음력 3~4일경", desc: "오른쪽에 가는 눈썹 모양이 밝아요." },
+];
+
+function phaseOf(angle) {
+  const a = ((angle % 360) + 360) % 360;
+  const idx = Math.round(a / 45) % 8;
+  return POSITIONS.find((p) => p.angle === idx * 45);
+}
+
+/** 지구에서 본 달: 밝은 부분 path (중심 0,0) */
+function litPath(e, r) {
+  const a = ((e % 360) + 360) % 360;
+  const c = Math.cos((a * Math.PI) / 180);
+  const rx = Math.max(0.001, Math.abs(c) * r);
+  const waxing = a < 180;
+  if (a < 0.5 || a > 359.5) return "";
+  if (waxing) {
+    const sweep = c > 0 ? 0 : 1;
+    return `M0 ${-r} A${r} ${r} 0 0 1 0 ${r} A${rx} ${r} 0 0 ${sweep} 0 ${-r}Z`;
+  }
+  const sweep = c > 0 ? 1 : 0;
+  return `M0 ${-r} A${r} ${r} 0 0 0 0 ${r} A${rx} ${r} 0 0 ${sweep} 0 ${-r}Z`;
+}
+
+function EarthViewMoon({ angle, r }) {
+  return (
+    <g>
+      <circle r={r} fill="var(--moon-dark)" stroke="var(--border)" strokeWidth={1.5} />
+      <path d={litPath(angle, r)} fill="var(--moon-lit)" />
+    </g>
+  );
+}
+
+function SpaceMoon({ r }) {
+  return (
+    <g>
+      <circle r={r} fill="var(--moon-dark)" />
+      <path d={`M0 ${-r} A${r} ${r} 0 0 1 0 ${r}Z`} fill="var(--moon-lit)" />
+      <circle r={r} fill="none" stroke="var(--muted-foreground)" strokeWidth={1} />
+    </g>
+  );
+}
+
+const CX = 320, CY = 270, OR = 175;
+const pt = (deg, rad = OR) => ({
+  x: CX + rad * Math.cos((deg * Math.PI) / 180),
+  y: CY - rad * Math.sin((deg * Math.PI) / 180),
+});
+
+function ObserverFigure() {
+  return (
+    <svg viewBox="0 0 260 240" className="h-56 w-60 shrink-0" role="img" aria-label="지구 위에 서서 달을 바라보는 사람의 뒷모습, 오른손에 빨간 장갑">
+      <g transform="translate(200 50)"><EarthViewMoon angle={70} r={24} /></g>
+      <text x={200} y={95} textAnchor="middle" fontSize={13} fill="var(--muted-foreground)">달</text>
+      {/* 지구 지표면 */}
+      <path d="M-20 240 Q130 170 280 240Z" fill="var(--earth)" />
+      <path d="M40 222 q30 -14 60 -6 q-10 14 -50 14z M170 214 q30 -4 50 10 q-30 6 -50 -10z" fill="var(--land)" />
+      {/* 사람(뒷모습) */}
+      <g transform="translate(0 20)">
+        <rect x={113} y={150} width={13} height={42} rx={5} fill="var(--person-pants)" />
+        <rect x={134} y={150} width={13} height={42} rx={5} fill="var(--person-pants)" />
+        <rect x={108} y={100} width={44} height={58} rx={14} fill="var(--person-shirt)" />
+        {/* 왼팔 (화면 왼쪽) */}
+        <rect x={94} y={104} width={13} height={46} rx={6} fill="var(--person-shirt)" />
+        <circle cx={100} cy={154} r={8} fill="var(--person-skin)" />
+        {/* 오른팔 + 빨간 장갑 (화면 오른쪽) */}
+        <rect x={153} y={104} width={13} height={46} rx={6} fill="var(--person-shirt)" />
+        <circle cx={160} cy={155} r={10} fill="var(--glove)" />
+        <circle cx={130} cy={82} r={20} fill="var(--person-skin)" />
+        <path d="M110 80 a20 20 0 0 1 40 0 q0 12 -4 16 q-16 4 -32 0 q-4 -4 -4 -16z" fill="var(--person-hair)" />
+      </g>
+      <text x={74} y={200} textAnchor="middle" fontSize={15} fontWeight={700} fill="var(--foreground)">왼쪽</text>
+      <text x={196} y={200} textAnchor="middle" fontSize={15} fontWeight={700} fill="var(--glove)">오른쪽</text>
+    </svg>
+  );
+}
+
+const HINTS = [
+  "햇빛은 오른쪽에서 옵니다.",
+  "달은 언제나 태양을 향한 절반이 밝습니다.",
+  "지구에서 그 밝은 절반을 얼마나 볼 수 있는지 생각해 보세요.",
+];
+
+function Btn({ children, onClick, variant = "secondary", disabled }) {
+  const v = {
+    primary: "bg-primary text-primary-foreground hover:brightness-110",
+    accent: "bg-accent text-accent-foreground hover:brightness-110",
+    secondary: "bg-secondary text-secondary-foreground border-2 border-border hover:bg-muted",
+  }[variant];
+  return (
+    <button onClick={onClick} disabled={disabled} className={`min-h-14 rounded-xl px-5 text-lg font-bold transition disabled:cursor-not-allowed disabled:opacity-40 ${v}`}>
+      {children}
+    </button>
+  );
+}
+
+function App() {
+  const [selected, setSelected] = useState(null);
+  const [revealed, setRevealed] = useState(false);
+  const [hints, setHints] = useState(0);
+  const [showAll, setShowAll] = useState(false);
+  const [animating, setAnimating] = useState(false);
+  const [animAngle, setAnimAngle] = useState(0);
+  const last = useRef(null);
+
+  useEffect(() => {
+    if (!animating) return;
+    let id = 0;
+    const tick = (t) => {
+      if (last.current != null) setAnimAngle((a) => (a + ((t - last.current) / 1000) * 15) % 360);
+      last.current = t;
+      id = requestAnimationFrame(tick);
+    };
+    id = requestAnimationFrame(tick);
+    return () => { cancelAnimationFrame(id); last.current = null; };
+  }, [animating]);
+
+  const reset = () => { setSelected(null); setRevealed(false); setHints(0); setShowAll(false); };
+  const select = (p) => { setSelected(p); setRevealed(false); };
+
+  const current = animating ? phaseOf(animAngle) : selected;
+  const obsAngle = animating ? animAngle : selected?.angle ?? 0;
+  const showMoon = animating || (selected && revealed);
+  const lunarDay = Math.round((animAngle / 360) * 29.5) + 1;
+
+  return (
+    <div className="min-h-screen bg-space px-4 py-5 md:px-8">
+      <header className="mx-auto max-w-7xl text-center">
+        <h1 className="font-display text-3xl text-primary md:text-5xl">달의 위상 변화, 내가 그린 게 맞을까?</h1>
+        <p className="mt-2 text-lg md:text-xl text-foreground">
+          {animating ? "달이 지구 주위를 도는 모습을 관찰해 보세요." : "활동지에서 확인하고 싶은 달의 위치를 눌러 보세요."}
+        </p>
+      </header>
+
+      <main className="mx-auto mt-5 grid max-w-7xl gap-5 lg:grid-cols-[1.35fr_1fr]">
+        {/* 궤도 그림 */}
+        <section className="rounded-2xl border-2 border-border bg-card p-3">
+          <svg viewBox="0 0 680 540" className="w-full h-auto" role="img" aria-label="지구 주위를 도는 달의 8개 위치">
+            <defs>
+              <marker id="arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M0 0L10 5L0 10z" fill="var(--sun)" />
+              </marker>
+              <marker id="orbitArrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+                <path d="M0 0L10 5L0 10z" fill="var(--muted-foreground)" />
+              </marker>
+              <radialGradient id="sunGlow">
+                <stop offset="0%" stopColor="var(--sun)" />
+                <stop offset="100%" stopColor="var(--sun-deep)" stopOpacity="0" />
+              </radialGradient>
+            </defs>
+            {/* 태양 */}
+            <circle cx={700} cy={CY} r={110} fill="url(#sunGlow)" />
+            <text x={660} y={40} textAnchor="end" fill="var(--sun)" fontSize={22} fontWeight={700}>☀ 태양 쪽</text>
+            {/* 햇빛 화살표 */}
+            {[70, 140, 210, 330, 400, 470].map((y) => (
+              <line key={y} x1={640} y1={y} x2={30} y2={y} stroke="var(--sun)" strokeOpacity={0.55} strokeWidth={2.5} markerEnd="url(#arrow)" />
+            ))}
+            <text x={600} y={522} textAnchor="end" fill="var(--sun)" fontSize={17}>햇빛 (오른쪽 → 왼쪽)</text>
+            {/* 궤도 */}
+            <circle cx={CX} cy={CY} r={OR} fill="none" stroke="var(--muted-foreground)" strokeDasharray="6 6" strokeWidth={2} />
+            <path d={`M${pt(20, OR).x} ${pt(20, OR).y} A${OR} ${OR} 0 0 0 ${pt(30, OR).x} ${pt(30, OR).y}`} fill="none" stroke="var(--muted-foreground)" strokeWidth={2} markerEnd="url(#orbitArrow)" />
+            <text x={pt(25, OR + 28).x + 18} y={pt(25, OR + 28).y} fill="var(--muted-foreground)" fontSize={14}>공전 방향</text>
+            {/* 지구 */}
+            <g transform={`translate(${CX} ${CY})`}>
+              <circle r={42} fill="var(--earth)" />
+              <path d="M-20 -25 q15 -8 22 6 q-4 14 -18 10 q-10 -4 -4 -16z M5 5 q18 -6 24 8 q-6 18 -22 12 q-8 -10 -2 -20z M-32 6 q8 2 6 12 q-8 4 -10 -4z" fill="var(--land)" />
+              <path d="M0 -42 A42 42 0 0 0 0 42Z" fill="var(--space)" opacity={0.45} />
+              <text y={66} textAnchor="middle" fill="var(--foreground)" fontSize={18} fontWeight={700}>지구</text>
+            </g>
+            {/* 달 8개 */}
+            {POSITIONS.map((p) => {
+              const m = pt(p.angle);
+              const l = pt(p.angle, OR + 50);
+              const isSel = !animating && selected?.label === p.label;
+              return (
+                <g key={p.label} onClick={() => !animating && select(p)} style={{ cursor: animating ? "default" : "pointer" }} opacity={animating ? 0.3 : 1} role="button" aria-label={`${p.label} 위치`}>
+                  <circle cx={m.x} cy={m.y} r={34} fill="transparent" />
+                  {isSel && <circle cx={m.x} cy={m.y} r={32} fill="none" stroke="var(--primary)" strokeWidth={4} />}
+                  <g transform={`translate(${m.x} ${m.y})`}><SpaceMoon r={22} /></g>
+                  <circle cx={l.x} cy={l.y} r={19} fill={isSel ? "var(--primary)" : "var(--secondary)"} stroke="var(--border)" />
+                  <text x={l.x} y={l.y + 7} textAnchor="middle" fontSize={20} fontWeight={800} fill={isSel ? "var(--primary-foreground)" : "var(--foreground)"}>{p.label}</text>
+                </g>
+              );
+            })}
+            {animating && (
+              <g transform={`translate(${pt(animAngle).x} ${pt(animAngle).y})`}>
+                <circle r={30} fill="none" stroke="var(--primary)" strokeWidth={3} />
+                <SpaceMoon r={22} />
+              </g>
+            )}
+          </svg>
+          <p className="px-2 pb-1 text-sm text-muted-foreground">순서: 맨 위 <b className="text-foreground">가</b>부터 반시계 방향으로 가 → 나 → 다 → 라 → 마 → 바 → 사 → 아 (달의 공전 방향과 같아요)</p>
+        </section>
+
+        {/* 관측창 */}
+        <section className="flex flex-col gap-4">
+          <div className="rounded-2xl border-2 border-border bg-card p-5">
+            <h2 className="text-xl font-bold">🔭 관측창: 지구에서 본 달</h2>
+            <div className="mt-3 flex justify-center">
+              <svg viewBox="-110 -110 220 220" className="w-56 h-56 md:w-64 md:h-64">
+                <circle r={108} fill="var(--space)" />
+                {showMoon ? (
+                  <EarthViewMoon angle={obsAngle} r={90} />
+                ) : (
+                  <>
+                    <circle r={90} fill="none" stroke="var(--muted-foreground)" strokeWidth={3} strokeDasharray="8 8" />
+                    <text y={22} textAnchor="middle" fontSize={64} fontWeight={800} fill="var(--muted-foreground)">?</text>
+                  </>
+                )}
+              </svg>
+            </div>
+            <div className="mt-3 min-h-28 text-center">
+              {!current && <p className="text-lg text-muted-foreground">왼쪽 그림에서 달의 위치를 먼저 골라 주세요.</p>}
+              {current && (
+                <>
+                  <p className="text-lg">선택 위치: <b className="text-2xl text-primary">{animating ? "공전 중" : current.label}</b></p>
+                  {showMoon ? (
+                    <>
+                      <p className="mt-1 font-display text-3xl text-primary">{current.name}</p>
+                      <p className="text-lg text-accent">{animating ? `음력 약 ${lunarDay}일` : current.day}</p>
+                      <p className="mt-1 text-lg">{current.desc}</p>
+                    </>
+                  ) : (
+                    <p className="mt-2 text-lg text-muted-foreground">활동지 그림과 비교할 준비가 되면 "정답 확인"을 누르세요.</p>
+                  )}
+                </>
+              )}
+            </div>
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <Btn variant="primary" onClick={() => setRevealed(true)} disabled={!selected || animating}>정답 확인</Btn>
+              <Btn variant="accent" onClick={() => setHints((h) => Math.min(3, h + 1))} disabled={hints >= 3}>힌트 보기 {hints > 0 && `(${hints}/3)`}</Btn>
+              <Btn onClick={() => setShowAll((s) => !s)}>{showAll ? "전체 정답 닫기" : "전체 정답 보기"}</Btn>
+              <Btn onClick={reset}>다시 도전</Btn>
+            </div>
+            <label className="mt-4 flex min-h-14 cursor-pointer items-center justify-between rounded-xl border-2 border-border bg-secondary px-4 text-lg font-bold">
+              <span>🌙 공전 애니메이션 {animating ? "켜짐" : "꺼짐"}</span>
+              <input type="checkbox" className="h-7 w-7 accent-primary" checked={animating} onChange={(e) => setAnimating(e.target.checked)} />
+            </label>
+            {hints > 0 && (
+              <ol className="mt-4 space-y-2">
+                {HINTS.slice(0, hints).map((h, i) => (
+                  <li key={i} className="rounded-lg bg-muted px-4 py-2 text-lg">💡 힌트 {i + 1}: {h}</li>
+                ))}
+              </ol>
+            )}
+          </div>
+
+          {/* 범례 */}
+          <div className="rounded-2xl border-2 border-border bg-card p-4">
+            <h3 className="text-lg font-bold">범례</h3>
+            <div className="mt-2 grid gap-3 sm:grid-cols-2">
+              <div className="flex items-center gap-3">
+                <svg viewBox="-26 -26 52 52" className="h-12 w-12 shrink-0"><SpaceMoon r={22} /></svg>
+                <p><b>우주에서 본 달</b><br /><span className="text-muted-foreground">궤도 위 작은 달. 태양 쪽 절반이 항상 밝아요.</span></p>
+              </div>
+              <div className="flex items-center gap-3">
+                <svg viewBox="-26 -26 52 52" className="h-12 w-12 shrink-0"><circle r={25} fill="var(--space)" /><EarthViewMoon angle={90} r={22} /></svg>
+                <p><b>지구에서 본 달</b><br /><span className="text-muted-foreground">관측창의 큰 달. 우리 눈에 보이는 모양이에요.</span></p>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      {showAll && (
+        <section className="mx-auto mt-5 max-w-7xl rounded-2xl border-2 border-primary bg-card p-5">
+          <h2 className="text-2xl font-bold">전체 정답: 지구에서 본 달의 모습</h2>
+          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {POSITIONS.map((p) => (
+              <div key={p.label} className="rounded-xl bg-muted p-3 text-center">
+                <p className="text-xl font-extrabold text-primary">{p.label}</p>
+                <svg viewBox="-55 -55 110 110" className="mx-auto my-2 h-24 w-24"><circle r={54} fill="var(--space)" /><EarthViewMoon angle={p.angle} r={44} /></svg>
+                <p className="text-lg font-bold">{p.name}</p>
+                <p className="text-accent">{p.day}</p>
+              </div>
+            ))}
+          </div>
+          <p className="mt-3 text-muted-foreground">※ 날짜는 대략적인 기준이에요. 실제 날짜는 해마다 조금씩 달라요.</p>
+        </section>
+      )}
+
+      <section className="mx-auto mt-5 max-w-7xl">
+        <p className="mb-3 text-center text-muted-foreground">※ 음력 날짜는 대략적인 기준이에요.</p>
+        <details className="rounded-2xl border-2 border-border bg-card p-5 text-lg">
+          <summary className="cursor-pointer text-xl font-bold">왜 달의 모양이 달라 보일까요?</summary>
+          <div className="mt-4 flex flex-col items-center gap-4 rounded-xl bg-space p-4 md:flex-row">
+            <ObserverFigure />
+            <div className="space-y-2">
+              <p className="text-xl font-bold text-primary">지구에서 달을 바라보는 사람</p>
+              <p>사람이 달을 향해 서 있는 <b>뒷모습</b>이에요. 우리도 같은 방향을 본다고 생각해요.</p>
+              <p><b className="text-destructive">빨간 장갑</b>을 낀 손이 <b>오른손</b>이에요. 오른손 쪽이 하늘의 <b>오른쪽</b>이에요.</p>
+              <p className="text-muted-foreground">초승달·상현달은 오른손 쪽이 밝고, 하현달·그믐달은 왼손 쪽이 밝아요.</p>
+            </div>
+          </div>
+          <ul className="mt-3 list-disc space-y-2 pl-6">
+            <li>달은 스스로 빛을 내지 않아요. <b>태양빛을 반사</b>해서 밝게 보여요.</li>
+            <li>달은 언제나 태양을 향한 절반이 밝아요.</li>
+            <li>달이 지구 주위를 돌면 <b>달-지구-태양의 위치</b>가 바뀌어, 지구에서 보이는 밝은 부분의 비율이 달라져요.</li>
+            <li>초승달 → 상현달 → 보름달로 갈 때는 <b>오른쪽</b>부터 밝아지고, 보름달 이후 하현달 → 그믐달로 갈 때는 <b>왼쪽</b>이 밝아요.</li>
+            <li className="text-primary"><b>오개념 바로잡기:</b> 달의 위상은 지구 그림자(월식) 때문에 생기는 것이 아니에요.</li>
+          </ul>
+        </details>
+      </section>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script></body></html>
